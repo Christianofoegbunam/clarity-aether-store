@@ -8,6 +8,10 @@ requirements = []
 path = "contracts/aether-store.clar"
 depends_on = []
 
+[contracts.escrow]
+path = "contracts/escrow.clar"
+depends_on = []
+
 [repl]
 costs_version = 2
 parser_version = 2
