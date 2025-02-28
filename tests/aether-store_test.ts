@@ -22,3 +22,39 @@ Clarinet.test({
     assertEquals(block.receipts[0].result.expectOk(), "u0");
   },
 });
+
+Clarinet.test({
+  name: "Cannot create listing with invalid price",
+  async fn(chain: Chain, accounts: Map<string, Account>) {
+    const wallet_1 = accounts.get("wallet_1")!;
+    
+    let block = chain.mineBlock([
+      Tx.contractCall("aether-store", "create-listing", 
+        [types.uint(0), types.utf8("Test Item"), types.utf8("Test Description")],
+        wallet_1.address
+      )
+    ]);
+    
+    block.receipts[0].result.expectErr(types.uint(101));
+  },
+});
+
+Clarinet.test({
+  name: "Can update own listing",
+  async fn(chain: Chain, accounts: Map<string, Account>) {
+    const wallet_1 = accounts.get("wallet_1")!;
+    
+    let block = chain.mineBlock([
+      Tx.contractCall("aether-store", "create-listing", 
+        [types.uint(1000000), types.utf8("Test Item"), types.utf8("Test Description")],
+        wallet_1.address
+      ),
+      Tx.contractCall("aether-store", "update-listing",
+        [types.uint(0), types.uint(2000000), types.utf8("Updated Item"), types.utf8("Updated Description")],
+        wallet_1.address
+      )
+    ]);
+    
+    assertEquals(block.receipts[1].result.expectOk(), true);
+  },
+});
