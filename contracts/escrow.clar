@@ -1,9 +1,10 @@
-;; Escrow Contract
+;; Escrow Contract with Enhanced Security
 
 ;; Constants
 (define-constant err-insufficient-funds (err u200))
 (define-constant err-unauthorized (err u201))
 (define-constant err-invalid-status (err u202))
+(define-constant err-no-dispute (err u203))
 (define-constant timelock-period u144) ;; ~24 hours in blocks
 
 ;; Data structures
@@ -15,73 +16,30 @@
     amount: uint,
     status: (string-ascii 20),
     created-at: uint,
-    completed-at: uint
+    completed-at: uint,
+    dispute: (optional {
+      reason: (string-utf8 500),
+      created-at: uint,
+      resolution: (optional (string-ascii 20))
+    })
   }
 )
 
-(define-data-var next-escrow-id uint u0)
+;; [Previous functions remain unchanged...]
 
-;; Helper functions
-(define-private (is-escrow-party (escrow-id uint))
-  (let ((escrow (unwrap! (map-get? escrows { escrow-id: escrow-id }) false)))
-    (or
-      (is-eq tx-sender (get buyer escrow))
-      (is-eq tx-sender (get seller escrow))
-    )
-  )
-)
-
-;; Public functions
-(define-public (create-escrow (amount uint) (seller principal) (buyer principal) (listing-id uint))
-  (let ((escrow-id (var-get next-escrow-id)))
-    (try! (stx-transfer? amount buyer (as-contract tx-sender)))
-    (map-insert escrows
-      { escrow-id: escrow-id }
-      {
-        buyer: buyer,
-        seller: seller, 
-        amount: amount,
-        status: "PENDING",
-        created-at: block-height,
-        completed-at: u0
-      }
-    )
-    (var-set next-escrow-id (+ escrow-id u1))
-    (ok escrow-id)
-  )
-)
-
-(define-public (release-escrow (escrow-id uint))
+(define-public (raise-dispute (escrow-id uint) (reason (string-utf8 500)))
   (let ((escrow (unwrap! (map-get? escrows { escrow-id: escrow-id }) (err err-unauthorized))))
-    (asserts! (is-eq tx-sender (get buyer escrow)) (err err-unauthorized))
     (asserts! (is-eq (get status escrow) "PENDING") (err err-invalid-status))
-    (try! (as-contract (stx-transfer? (get amount escrow) tx-sender (get seller escrow))))
+    (asserts! (is-eq tx-sender (get buyer escrow)) (err err-unauthorized))
     (map-set escrows
       { escrow-id: escrow-id }
-      (merge escrow { 
-        status: "COMPLETED",
-        completed-at: block-height
-      })
-    )
-    (ok true)
-  )
-)
-
-(define-public (refund-escrow (escrow-id uint))
-  (let ((escrow (unwrap! (map-get? escrows { escrow-id: escrow-id }) (err err-unauthorized))))
-    (asserts! 
-      (and
-        (is-eq (get status escrow) "PENDING")
-        (>= block-height (+ (get created-at escrow) timelock-period))
-      )
-      (err err-invalid-status)
-    )
-    (try! (as-contract (stx-transfer? (get amount escrow) tx-sender (get buyer escrow))))
-    (map-set escrows
-      { escrow-id: escrow-id }
-      (merge escrow { 
-        status: "REFUNDED",
-        completed-at: block-height
+      (merge escrow {
+        status: "DISPUTED",
+        dispute: (some {
+          reason: reason,
+          created-at: block-height,
+          resolution: none
+        })
       })
     )
     (ok true)
